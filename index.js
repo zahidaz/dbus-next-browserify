@@ -70,7 +70,20 @@ module.exports.connect = function(address, opts) {
   if (!opts.authMethods) {
     opts.authMethods = ['EXTERNAL', 'ANONYMOUS'];
   }
-  return createClient(opts);
+  let connection = createConnection(opts);
+  if (opts.peer) {
+    connection.mode = 'p2p';
+  }
+  return new MessageBus(connection);
+};
+
+module.exports.peerBus = function(stream, opts) {
+  opts = opts || {};
+  opts.stream = stream;
+  opts.noAuth = true;
+  let connection = createConnection(opts);
+  connection.mode = 'p2p';
+  return new MessageBus(connection);
 };
 
 module.exports.interface = iface;

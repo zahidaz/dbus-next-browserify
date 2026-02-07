@@ -156,7 +156,15 @@ declare module 'dbus-next' {
         busAddress?: string;
     }
 
+    export interface ConnectOptions {
+        noAuth?: boolean;
+        peer?: boolean;
+        authMethods?: AuthMethod[];
+    }
+
     export function setBigIntCompat(state: boolean): void;
     export function systemBus(options?: SystemBusOptions): MessageBus;
     export function sessionBus(options?: SessionBusOptions): MessageBus;
+    export function connect(address: string, opts?: ConnectOptions): MessageBus;
+    export function peerBus(stream: any, opts?: SessionBusOptions): MessageBus;
 }

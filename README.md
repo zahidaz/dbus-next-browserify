@@ -2,16 +2,13 @@
 
 Fork of [dbus-next](https://github.com/dbusjs/node-dbus-next) with browser WebSocket support.
 
-Works in Node.js (unchanged) and in the browser over `ws://` / `wss://`. Useful for connecting to any D-Bus server that speaks wire protocol over WebSocket, including [frida-server](https://frida.re).
+Works in Node.js (unchanged) and in the browser over `ws://` / `wss://`. Useful for connecting to any D-Bus server that speaks wire protocol over WebSocket.
 
 ## Browser Quick Start
 
-```bash
-npm run build:browser:iife   # produces dist/dbus-next.iife.js
-```
-
+Via CDN:
 ```html
-<script src="dbus-next.iife.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/zahidaz/dbus-next-browserify@release/dist/dbus-next.iife.js"></script>
 <script>
   var bus = DBusNext.connect('ws://localhost:9876');
 
