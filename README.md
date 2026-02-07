@@ -1,27 +1,48 @@
-# dbus-next
+# dbus-next-browserify
 
-The next great DBus library for NodeJS.
+Fork of [dbus-next](https://github.com/dbusjs/node-dbus-next) with browser WebSocket support.
 
-[Documentation](https://acrisci.github.io/doc/node-dbus-next/)
+Works in Node.js (unchanged) and in the browser over `ws://` / `wss://`. Useful for connecting to any D-Bus server that speaks wire protocol over WebSocket, including [frida-server](https://frida.re).
 
-[Chat](https://discord.gg/UdbXHVX)
+## Browser Quick Start
 
-## About
-
-dbus-next is a fully featured high level library for DBus geared primarily towards integration of applications into Linux desktop and mobile environments.
-
-Desktop application developers can use this library for integrating their applications into desktop environments by implementing common DBus standard interfaces or creating custom plugin interfaces.
-
-Desktop users can use this library to create their own scripts and utilities to interact with those interfaces for customization of their desktop environment.
-
-## Node Compatibility
-
-As of now, dbus-next targets the latest features of JavaScript. The earliest version supported is `6.3.0`. However, the library uses `BigInt` by default for the long integer types which was introduced in `10.8.0`. If you need to support versions earlier than this, set BigInt compatibility mode. This will configure the library to use [JSBI](https://github.com/GoogleChromeLabs/jsbi) as a polyfill for long types.
-
-```javascript
-const dbus = require('dbus-next');
-dbus.setBigIntCompat(true);
+```bash
+npm run build:browser:iife   # produces dist/dbus-next.iife.js
 ```
+
+```html
+<script src="dbus-next.iife.js"></script>
+<script>
+  var bus = DBusNext.connect('ws://localhost:9876');
+
+  bus.on('connect', function() {
+    var msg = new DBusNext.Message({
+      path: '/org/example/Object',
+      destination: 'org.example.Service',
+      interface: 'org.example.Interface',
+      member: 'MethodName',
+      signature: 's',
+      body: ['argument']
+    });
+
+    bus.call(msg).then(function(reply) {
+      console.log(reply.body);
+    });
+  });
+</script>
+```
+
+For servers that skip D-Bus auth (e.g. frida-server):
+
+```js
+var bus = DBusNext.connect('ws://device:27042', { noAuth: true });
+```
+
+See [docs/browser.md](docs/browser.md) and [docs/frida.md](docs/frida.md) for more.
+
+## Node.js Usage
+
+All existing Node.js functionality is unchanged. Install and use as before.
 
 ## The Client Interface
 
@@ -261,11 +282,9 @@ To support negotiating Unix file descriptors (DBus type `h`), set `negotiateUnix
 
 ## Contributing
 
-Contributions are welcome. Development happens on [Github](https://github.com/dbusjs/node-dbus-next).
+Contributions are welcome. Development happens on [Github](https://github.com/zahidaz/dbus-next-browserify).
 
-## Similar Projects
-
-dbus-next is a fork of [dbus-native](https://github.com/sidorares/dbus-native) library. While this library is great, it has many bugs which I don't think can be fixed without completely redesigning the user API. Another library exists [node-dbus](https://github.com/Shouqun/node-dbus) which is similar, but also not provide enough features to create full-featured DBus services.
+Upstream: [dbusjs/node-dbus-next](https://github.com/dbusjs/node-dbus-next)
 
 ## Copyright
 

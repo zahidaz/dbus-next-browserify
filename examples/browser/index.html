@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>dbus-next browser test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
+    h1 { margin-bottom: 16px; color: #fff; font-size: 18px; }
+    .panel { background: #16213e; border: 1px solid #0f3460; border-radius: 6px; padding: 16px; margin-bottom: 12px; }
+    .panel h2 { font-size: 14px; color: #53a8b6; margin-bottom: 10px; }
+    button { background: #0f3460; color: #e0e0e0; border: 1px solid #53a8b6; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 13px; margin-right: 8px; margin-bottom: 6px; }
+    button:hover { background: #53a8b6; color: #1a1a2e; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.run-all { background: #4ecca3; color: #1a1a2e; border-color: #4ecca3; font-weight: bold; }
+    button.run-all:hover { background: #3bb890; }
+    #log { background: #0a0a1a; border: 1px solid #0f3460; border-radius: 4px; padding: 12px; height: 450px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+    .log-entry { border-bottom: 1px solid #0f3460; padding: 2px 0; }
+    .log-info { color: #53a8b6; }
+    .log-ok { color: #4ecca3; }
+    .log-err { color: #e23e57; }
+    .log-signal { color: #f0a500; }
+    .log-test { color: #bb86fc; }
+    input { background: #0a0a1a; color: #e0e0e0; border: 1px solid #0f3460; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 13px; width: 260px; margin-right: 8px; }
+    .status { display: inline-block; padding: 3px 10px; border-radius: 3px; font-size: 12px; margin-left: 10px; }
+    .status-disconnected { background: #e23e57; color: #fff; }
+    .status-connected { background: #4ecca3; color: #1a1a2e; }
+    .summary { margin-top: 8px; padding: 10px; border-radius: 4px; font-size: 14px; font-weight: bold; }
+    .summary-pass { background: #1a3a2a; color: #4ecca3; border: 1px solid #4ecca3; }
+    .summary-fail { background: #3a1a1a; color: #e23e57; border: 1px solid #e23e57; }
+  </style>
+</head>
+<body>
+
+<h1>dbus-next browser test <span id="status" class="status status-disconnected">disconnected</span></h1>
+
+<div class="panel">
+  <h2>connection</h2>
+  <input id="url" type="text" value="ws://localhost:9876" />
+  <button id="btnConnect" onclick="doConnect()">Connect</button>
+  <button id="btnDisconnect" onclick="doDisconnect()" disabled>Disconnect</button>
+</div>
+
+<div class="panel">
+  <h2>tests</h2>
+  <button class="run-all" onclick="runAll()" id="btnRunAll" disabled>Run All Tests</button>
+  <br><br>
+  <button onclick="testEchoString()" class="action-btn" disabled>Echo String</button>
+  <button onclick="testBasicTypes()" class="action-btn" disabled>Basic Types</button>
+  <button onclick="testArray()" class="action-btn" disabled>Array</button>
+  <button onclick="testDict()" class="action-btn" disabled>Dict</button>
+  <button onclick="testStruct()" class="action-btn" disabled>Struct</button>
+  <button onclick="testNested()" class="action-btn" disabled>Nested</button>
+  <button onclick="testVariant()" class="action-btn" disabled>Variant</button>
+  <button onclick="testVariantDict()" class="action-btn" disabled>Variant Dict</button>
+  <button onclick="testSendMultipleTypes()" class="action-btn" disabled>Send Multiple Types</button>
+  <button onclick="testErrorHandling()" class="action-btn" disabled>Error Handling</button>
+  <button onclick="testSignals()" class="action-btn" disabled>Signals</button>
+  <div id="summary"></div>
+</div>
+
+<div class="panel">
+  <h2>noAuth mode (e.g. frida-server)</h2>
+  <input id="noauth-url" type="text" value="ws://localhost:9877" />
+  <button id="btnNoAuthTest" onclick="testNoAuth()">Run noAuth Test</button>
+  <div id="noauth-summary"></div>
+</div>
+
+<div class="panel">
+  <h2>log</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+  window.onerror = function(msg, src, line, col, err) {
+    document.getElementById('log').innerHTML +=
+      '<div class="log-entry log-err">UNCAUGHT: ' + msg + ' at ' + src + ':' + line + '</div>';
+  };
+</script>
+<script src="/dbus-next.iife.js"></script>
+<script>
+  var bus = null;
+  var passed = 0;
+  var failed = 0;
+
+  function log(msg, cls) {
+    var el = document.getElementById('log');
+    var entry = document.createElement('div');
+    entry.className = 'log-entry ' + (cls || 'log-info');
+    entry.textContent = new Date().toISOString().slice(11, 23) + '  ' + msg;
+    el.appendChild(entry);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function assert(name, condition, detail) {
+    if (condition) {
+      passed++;
+      log('PASS: ' + name + (detail ? ' -- ' + detail : ''), 'log-ok');
+    } else {
+      failed++;
+      log('FAIL: ' + name + (detail ? ' -- ' + detail : ''), 'log-err');
+    }
+  }
+
+  function showSummary() {
+    var el = document.getElementById('summary');
+    var total = passed + failed;
+    var allPass = failed === 0;
+    el.className = 'summary ' + (allPass ? 'summary-pass' : 'summary-fail');
+    el.textContent = (allPass ? 'ALL PASSED' : 'SOME FAILED') + ': ' + passed + '/' + total + ' tests passed, ' + failed + ' failed';
+  }
+
+  function setConnected(connected) {
+    var s = document.getElementById('status');
+    s.textContent = connected ? 'connected' : 'disconnected';
+    s.className = 'status ' + (connected ? 'status-connected' : 'status-disconnected');
+    document.getElementById('btnConnect').disabled = connected;
+    document.getElementById('btnDisconnect').disabled = !connected;
+    document.getElementById('btnRunAll').disabled = !connected;
+    var btns = document.querySelectorAll('.action-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = !connected;
+  }
+
+  if (typeof DBusNext === 'undefined') {
+    log('ERROR: DBusNext failed to load. Check browser console.', 'log-err');
+  } else {
+    log('library loaded: ' + Object.keys(DBusNext).join(', '), 'log-ok');
+  }
+
+  function callMethod(member, signature, body) {
+    var msg = new DBusNext.Message({
+      path: '/org/test/Server',
+      destination: 'org.test.Server',
+      interface: 'org.test.Server',
+      member: member
+    });
+    if (signature) {
+      msg.signature = signature;
+      msg.body = body;
+    }
+    return bus.call(msg);
+  }
+
+  function doConnect() {
+    var url = document.getElementById('url').value;
+    log('connecting to ' + url + ' ...');
+    try {
+      bus = DBusNext.connect(url);
+    } catch (e) {
+      log('connect() threw: ' + e.message, 'log-err');
+      return;
+    }
+    bus.on('connect', function() {
+      log('connected as ' + bus.name, 'log-ok');
+      setConnected(true);
+    });
+    bus.on('error', function(err) {
+      log('bus error: ' + (err.message || err), 'log-err');
+    });
+  }
+
+  function doDisconnect() {
+    if (bus) {
+      bus.disconnect();
+      bus = null;
+      log('disconnected');
+      setConnected(false);
+    }
+  }
+
+  function testEchoString() {
+    log('-- test: echo string --', 'log-test');
+    return callMethod('EchoString', 's', ['hello from browser']).then(function(reply) {
+      assert('echo string value', reply.body[0] === 'hello from browser', 'got: ' + reply.body[0]);
+    }).catch(function(err) { assert('echo string', false, err.message); });
+  }
+
+  function testBasicTypes() {
+    log('-- test: basic types (y b n q i u d s) --', 'log-test');
+    return callMethod('GetBasicTypes').then(function(reply) {
+      var b = reply.body;
+      assert('byte (y)', b[0] === 255, 'got: ' + b[0]);
+      assert('boolean (b)', b[1] === true, 'got: ' + b[1]);
+      assert('int16 (n)', b[2] === -1234, 'got: ' + b[2]);
+      assert('uint16 (q)', b[3] === 65000, 'got: ' + b[3]);
+      assert('int32 (i)', b[4] === -100000, 'got: ' + b[4]);
+      assert('uint32 (u)', b[5] === 100000, 'got: ' + b[5]);
+      assert('double (d)', Math.abs(b[6] - 3.14159265) < 0.0001, 'got: ' + b[6]);
+      assert('string (s)', b[7] === 'hello from server', 'got: ' + b[7]);
+    }).catch(function(err) { assert('basic types', false, err.message); });
+  }
+
+  function testArray() {
+    log('-- test: array --', 'log-test');
+    return callMethod('GetArray').then(function(reply) {
+      var arr = reply.body[0];
+      assert('array length', arr.length === 5, 'got length: ' + arr.length);
+      assert('array values', JSON.stringify(arr) === '[10,20,30,40,50]', 'got: ' + JSON.stringify(arr));
+    }).catch(function(err) { assert('array', false, err.message); });
+  }
+
+  function testDict() {
+    log('-- test: dict a{su} --', 'log-test');
+    return callMethod('GetDict').then(function(reply) {
+      var d = reply.body[0];
+      assert('dict alpha', d.alpha === 1, 'got: ' + d.alpha);
+      assert('dict beta', d.beta === 2, 'got: ' + d.beta);
+      assert('dict gamma', d.gamma === 3, 'got: ' + d.gamma);
+    }).catch(function(err) { assert('dict', false, err.message); });
+  }
+
+  function testStruct() {
+    log('-- test: struct (siu) --', 'log-test');
+    return callMethod('GetStruct').then(function(reply) {
+      var s = reply.body[0];
+      assert('struct is array', Array.isArray(s), 'got: ' + typeof s);
+      assert('struct[0] string', s[0] === 'structval', 'got: ' + s[0]);
+      assert('struct[1] int32', s[1] === -42, 'got: ' + s[1]);
+      assert('struct[2] uint32', s[2] === 999, 'got: ' + s[2]);
+    }).catch(function(err) { assert('struct', false, err.message); });
+  }
+
+  function testNested() {
+    log('-- test: nested a{sai} --', 'log-test');
+    return callMethod('GetNested').then(function(reply) {
+      var d = reply.body[0];
+      assert('nested has primes', JSON.stringify(d.primes) === '[2,3,5,7,11]', 'got: ' + JSON.stringify(d.primes));
+      assert('nested has evens', JSON.stringify(d.evens) === '[2,4,6,8,10]', 'got: ' + JSON.stringify(d.evens));
+    }).catch(function(err) { assert('nested', false, err.message); });
+  }
+
+  function testVariant() {
+    log('-- test: variant --', 'log-test');
+    return callMethod('GetVariant').then(function(reply) {
+      var v = reply.body[0];
+      assert('variant is Variant', v instanceof DBusNext.Variant, 'got: ' + typeof v);
+      assert('variant signature', v.signature === 's', 'got: ' + v.signature);
+      assert('variant value', v.value === 'variant-value', 'got: ' + v.value);
+    }).catch(function(err) { assert('variant', false, err.message); });
+  }
+
+  function testVariantDict() {
+    log('-- test: variant dict a{sv} --', 'log-test');
+    return callMethod('GetVariantDict').then(function(reply) {
+      var d = reply.body[0];
+      assert('vdict name', d.name instanceof DBusNext.Variant && d.name.value === 'dbus-next',
+        'got: ' + (d.name && d.name.value));
+      assert('vdict version', d.version instanceof DBusNext.Variant && d.version.value === 1,
+        'got: ' + (d.version && d.version.value));
+      assert('vdict features', d.features instanceof DBusNext.Variant && JSON.stringify(d.features.value) === '["websocket","browser","marshall"]',
+        'got: ' + (d.features && JSON.stringify(d.features.value)));
+    }).catch(function(err) { assert('variant dict', false, err.message); });
+  }
+
+  function testSendMultipleTypes() {
+    log('-- test: send multiple types (client -> server) --', 'log-test');
+    return callMethod('SendAndVerify', 'siaib', ['test-string', -42, [1, 2, 3], true]).then(function(reply) {
+      assert('server received types', reply.body[1] === true, 'server said: ' + reply.body[0]);
+    }).catch(function(err) { assert('send multiple types', false, err.message); });
+  }
+
+  function testErrorHandling() {
+    log('-- test: error handling --', 'log-test');
+    return callMethod('TriggerError').then(function() {
+      assert('error handling', false, 'expected error but got success');
+    }).catch(function(err) {
+      assert('error is DBusError', err instanceof DBusNext.DBusError, 'got: ' + err.constructor.name);
+      assert('error type', err.type === 'org.test.Error.TestError', 'got: ' + err.type);
+      assert('error message', err.text === 'This is a test error from the server', 'got: ' + err.text);
+    });
+  }
+
+  function testSignals() {
+    log('-- test: signals --', 'log-test');
+    return new Promise(function(resolve) {
+      var received = [];
+      var handler = function(msg) {
+        if (msg.member === 'Counter') {
+          received.push(msg.body[0]);
+          log('signal Counter: ' + msg.body[0] + ' - ' + msg.body[1], 'log-signal');
+        }
+        if (msg.member === 'SignalsDone') {
+          bus.removeListener('message', handler);
+          assert('received 5 signals', received.length === 5, 'got: ' + received.length);
+          assert('signal values sequential', JSON.stringify(received) === '[1,2,3,4,5]', 'got: ' + JSON.stringify(received));
+          resolve();
+        }
+      };
+      bus.on('message', handler);
+      callMethod('SubscribeSignals');
+    });
+  }
+
+  function testNoAuth() {
+    log('========== noAuth TEST ==========', 'log-test');
+    var noAuthUrl = document.getElementById('noauth-url').value;
+    var noAuthBus = null;
+    var noAuthPassed = 0;
+    var noAuthFailed = 0;
+
+    function noAuthAssert(name, condition, detail) {
+      if (condition) {
+        noAuthPassed++;
+        log('PASS: [noAuth] ' + name + (detail ? ' -- ' + detail : ''), 'log-ok');
+      } else {
+        noAuthFailed++;
+        log('FAIL: [noAuth] ' + name + (detail ? ' -- ' + detail : ''), 'log-err');
+      }
+    }
+
+    function noAuthSummary() {
+      var el = document.getElementById('noauth-summary');
+      var total = noAuthPassed + noAuthFailed;
+      var allPass = noAuthFailed === 0;
+      el.className = 'summary ' + (allPass ? 'summary-pass' : 'summary-fail');
+      el.textContent = (allPass ? 'ALL PASSED' : 'SOME FAILED') + ': ' + noAuthPassed + '/' + total + ' noAuth tests passed, ' + noAuthFailed + ' failed';
+    }
+
+    log('connecting to ' + noAuthUrl + ' with noAuth: true ...');
+    try {
+      noAuthBus = DBusNext.connect(noAuthUrl, { noAuth: true });
+    } catch (e) {
+      log('noAuth connect() threw: ' + e.message, 'log-err');
+      return;
+    }
+
+    noAuthBus.on('connect', function() {
+      noAuthAssert('connected', true, 'name: ' + noAuthBus.name);
+      noAuthAssert('has unique name', noAuthBus.name && noAuthBus.name.startsWith(':'), 'got: ' + noAuthBus.name);
+
+      var msg = new DBusNext.Message({
+        path: '/org/test/Server',
+        destination: 'org.test.Server',
+        interface: 'org.test.Server',
+        member: 'EchoString',
+        signature: 's',
+        body: ['noauth hello']
+      });
+
+      noAuthBus.call(msg).then(function(reply) {
+        noAuthAssert('echo reply', reply.body[0] === 'noauth hello', 'got: ' + reply.body[0]);
+
+        var timeMsg = new DBusNext.Message({
+          path: '/org/test/Server',
+          destination: 'org.test.Server',
+          interface: 'org.test.Server',
+          member: 'GetServerTime'
+        });
+
+        return noAuthBus.call(timeMsg);
+      }).then(function(reply) {
+        noAuthAssert('server time is string', typeof reply.body[0] === 'string', 'got: ' + reply.body[0]);
+        noAuthAssert('server time is ISO format', reply.body[0].indexOf('T') > 0, 'got: ' + reply.body[0]);
+        log('========== noAuth DONE ==========', 'log-test');
+        noAuthSummary();
+        noAuthBus.disconnect();
+      }).catch(function(err) {
+        noAuthAssert('method call', false, err.message);
+        noAuthSummary();
+        noAuthBus.disconnect();
+      });
+    });
+
+    noAuthBus.on('error', function(err) {
+      log('noAuth bus error: ' + (err.message || err), 'log-err');
+    });
+  }
+
+  function runAll() {
+    passed = 0;
+    failed = 0;
+    document.getElementById('summary').className = '';
+    document.getElementById('summary').textContent = '';
+    log('========== RUNNING ALL TESTS ==========', 'log-test');
+
+    testEchoString()
+      .then(testBasicTypes)
+      .then(testArray)
+      .then(testDict)
+      .then(testStruct)
+      .then(testNested)
+      .then(testVariant)
+      .then(testVariantDict)
+      .then(testSendMultipleTypes)
+      .then(testErrorHandling)
+      .then(testSignals)
+      .then(function() {
+        log('========== DONE ==========', 'log-test');
+        showSummary();
+      })
+      .catch(function(err) {
+        log('unexpected error: ' + err.message, 'log-err');
+        showSummary();
+      });
+  }
+</script>
+
+</body>
+</html>

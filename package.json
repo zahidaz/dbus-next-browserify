@@ -12,6 +12,7 @@
   "description": "The next great DBus library for Node",
   "files": [
     "lib/*",
+    "lib/shims/*",
     "index.js",
     "package.json",
     "types.d.ts"
@@ -22,6 +23,24 @@
     "examples": "examples"
   },
   "main": "index.js",
+  "browser": {
+    "safe-buffer": "buffer",
+    "@nornagon/put": "./lib/shims/put.js",
+    "crypto": "crypto-browserify",
+    "fs": "./lib/shims/fs.js",
+    "events": "events",
+    "net": "./lib/shims/net.js",
+    "path": "path-browserify",
+    "os": "os-browserify/browser",
+    "process": "process/browser",
+    "assert": "assert",
+    "stream": "stream-browserify",
+    "timers": "timers-browserify",
+    "event-stream": "./lib/shims/noop.js",
+    "child_process": "./lib/shims/noop.js",
+    "usocket": "./lib/shims/noop.js",
+    "x11": "./lib/shims/noop.js"
+  },
   "types": "types.d.ts",
   "maintainers": [
     {
@@ -35,11 +54,20 @@
     "url": "http://github.com/dbusjs/node-dbus-next.git"
   },
   "dependencies": {
+    "@nornagon/put": "0.0.8",
+    "assert": "^2.1.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
     "event-stream": "3.3.4",
+    "events": "^3.3.0",
     "jsbi": "^2.0.5",
     "long": "^4.0.0",
-    "@nornagon/put": "0.0.8",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10",
     "safe-buffer": "^5.1.1",
+    "stream-browserify": "^3.0.0",
+    "timers-browserify": "^2.0.12",
     "xml2js": "^0.4.17"
   },
   "optionalDependencies": {
@@ -57,10 +85,12 @@
     "babel-plugin-syntax-async-functions": "^6.13.0",
     "babel-plugin-transform-async-to-generator": "^6.24.1",
     "commander": "^2.19.0",
+    "esbuild": "^0.27.3",
     "handlebars": "^4.1.0",
     "jest": "^24.1.0",
     "jsdoc": "^3.6.3",
-    "semistandard": "^16.0.0"
+    "semistandard": "^16.0.0",
+    "ws": "^8.19.0"
   },
   "scripts": {
     "integration": "dbus-run-session -- jest ./test/integration",
@@ -68,7 +98,9 @@
     "unit": "jest ./test/*.test.js",
     "test": "dbus-run-session -- jest",
     "doc": "jsdoc --verbose -c jsdoc.conf --readme README.md -r lib index.js -d doc",
-    "format": "cd lib && semistandard --global BigInt --fix && cd ../test && semistandard --env jest --parser babel-eslint --global BigInt --fix"
+    "format": "cd lib && semistandard --global BigInt --fix && cd ../test && semistandard --env jest --parser babel-eslint --global BigInt --fix",
+    "build:browser": "esbuild index.js --bundle --outfile=dist/dbus-next.js --format=esm --platform=browser --inject:./lib/shims/globals.js",
+    "build:browser:iife": "esbuild index.js --bundle --outfile=dist/dbus-next.iife.js --format=iife --global-name=DBusNext --platform=browser --inject:./lib/shims/globals.js"
   },
   "jest": {
     "testEnvironment": "node",

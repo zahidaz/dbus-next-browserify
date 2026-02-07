@@ -64,6 +64,15 @@ module.exports.ReleaseNameReply = constants.ReleaseNameReply;
 module.exports.MessageType = constants.MessageType;
 module.exports.MessageFlag = constants.MessageFlag;
 
+module.exports.connect = function(address, opts) {
+  opts = opts || {};
+  opts.busAddress = address;
+  if (!opts.authMethods) {
+    opts.authMethods = ['EXTERNAL', 'ANONYMOUS'];
+  }
+  return createClient(opts);
+};
+
 module.exports.interface = iface;
 module.exports.Variant = Variant;
 module.exports.Message = Message;
