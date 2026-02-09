@@ -7,18 +7,33 @@ npm run build:browser        # ESM  → dist/dbus-next.js
 npm run build:browser:iife   # IIFE → dist/dbus-next.iife.js
 ```
 
-## Setup
+## CDN
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/zahidaz/dbus-next-browserify@release/dist/dbus-next.iife.js"></script>
+```
+
+```js
+import * as dbus from 'https://cdn.jsdelivr.net/gh/zahidaz/dbus-next-browserify@release/dist/dbus-next.js';
+```
+
+## Self-hosted
+
+```bash
+npm run build:browser        # ESM  → dist/dbus-next.js
+npm run build:browser:iife   # IIFE → dist/dbus-next.iife.js
+```
+
+IIFE (exposes `DBusNext` global):
+```html
+<script src="dbus-next.iife.js"></script>
+```
 
 ESM:
 ```html
 <script type="module">
   import * as dbus from './dbus-next.js';
 </script>
-```
-
-IIFE (exposes `DBusNext` global):
-```html
-<script src="dbus-next.iife.js"></script>
 ```
 
 ## Connect

@@ -3785,7 +3785,16 @@ var DBusNext = (() => {
           throw new Error("missing signature for property");
         }
         options.signatureTree = parseSignature(options.signature);
-        return function(descriptor) {
+        return function(targetOrDescriptor, key, desc) {
+          if (key !== void 0) {
+            options.name = options.name || key;
+            assertMemberNameValid(options.name);
+            const klass = targetOrDescriptor.constructor;
+            klass.prototype.$properties = klass.prototype.$properties || [];
+            klass.prototype.$properties[key] = options;
+            return desc;
+          }
+          const descriptor = targetOrDescriptor;
           options.name = options.name || descriptor.key;
           assertMemberNameValid(options.name);
           descriptor.finisher = function(klass) {
@@ -3801,7 +3810,17 @@ var DBusNext = (() => {
         options.outSignature = options.outSignature || "";
         options.inSignatureTree = parseSignature(options.inSignature);
         options.outSignatureTree = parseSignature(options.outSignature);
-        return function(descriptor) {
+        return function(targetOrDescriptor, key, desc) {
+          if (key !== void 0) {
+            options.name = options.name || key;
+            assertMemberNameValid(options.name);
+            options.fn = desc.value;
+            const klass = targetOrDescriptor.constructor;
+            klass.prototype.$methods = klass.prototype.$methods || [];
+            klass.prototype.$methods[key] = options;
+            return desc;
+          }
+          const descriptor = targetOrDescriptor;
           options.name = options.name || descriptor.key;
           assertMemberNameValid(options.name);
           options.fn = descriptor.descriptor.value;
@@ -3815,7 +3834,24 @@ var DBusNext = (() => {
       function signal(options) {
         options.signature = options.signature || "";
         options.signatureTree = parseSignature(options.signature);
-        return function(descriptor) {
+        return function(targetOrDescriptor, key, desc) {
+          if (key !== void 0) {
+            options.name = options.name || key;
+            assertMemberNameValid(options.name);
+            options.fn = desc.value;
+            desc.value = function() {
+              if (options.disabled) {
+                throw new Error("tried to call a disabled signal");
+              }
+              const result = options.fn.apply(this, arguments);
+              this.$emitter.emit("signal", options, result);
+            };
+            const klass = targetOrDescriptor.constructor;
+            klass.prototype.$signals = klass.prototype.$signals || [];
+            klass.prototype.$signals[key] = options;
+            return desc;
+          }
+          const descriptor = targetOrDescriptor;
           options.name = options.name || descriptor.key;
           assertMemberNameValid(options.name);
           options.fn = descriptor.descriptor.value;
@@ -13704,18 +13740,24 @@ ${e.stack}`));
           conn.on("error", (err) => {
             this.emit("error", err);
           });
-          const helloMessage = new Message({
-            path: "/org/freedesktop/DBus",
-            destination: "org.freedesktop.DBus",
-            interface: "org.freedesktop.DBus",
-            member: "Hello"
-          });
-          this.call(helloMessage).then((msg) => {
-            this.name = msg.body[0];
-            this.emit("connect");
-          }).catch((err) => {
-            this.emit("error", err);
-          });
+          if (conn.mode === "p2p") {
+            conn.once("connect", () => {
+              this.emit("connect");
+            });
+          } else {
+            const helloMessage = new Message({
+              path: "/org/freedesktop/DBus",
+              destination: "org.freedesktop.DBus",
+              interface: "org.freedesktop.DBus",
+              member: "Hello"
+            });
+            this.call(helloMessage).then((msg) => {
+              this.name = msg.body[0];
+              this.emit("connect");
+            }).catch((err) => {
+              this.emit("error", err);
+            });
+          }
         }
         /**
          * Get a {@link ProxyObject} on the bus for the given name and path for interacting
@@ -13990,6 +14032,9 @@ ${e.stack}`));
           }
         }
         _addMatch(match) {
+          if (this._connection.mode === "p2p") {
+            return Promise.resolve();
+          }
           if (Object.prototype.hasOwnProperty.call(match, this._matchRules)) {
             this._matchRules[match] += 1;
             return Promise.resolve();
@@ -14006,6 +14051,9 @@ ${e.stack}`));
           return this.call(msg);
         }
         _removeMatch(match) {
+          if (this._connection.mode === "p2p") {
+            return Promise.resolve();
+          }
           if (!this._connection.stream.writable) {
             return Promise.resolve();
           }
@@ -58040,6 +58088,9 @@ ${e.stack}`));
       var { Message } = require_message_type();
       var { messageToJsFmt, marshallMessage } = require_marshall_compat();
       function createStream(opts) {
+        if (opts.stream) {
+          return opts.stream;
+        }
         let { busAddress, negotiateUnixFd } = opts;
         if (negotiateUnixFd === void 0) {
           negotiateUnixFd = false;
@@ -58239,7 +58290,19 @@ ${e.stack}`));
         if (!opts.authMethods) {
           opts.authMethods = ["EXTERNAL", "ANONYMOUS"];
         }
-        return createClient(opts);
+        let connection = createConnection(opts);
+        if (opts.peer) {
+          connection.mode = "p2p";
+        }
+        return new MessageBus(connection);
+      };
+      module.exports.peerBus = function(stream, opts) {
+        opts = opts || {};
+        opts.stream = stream;
+        opts.noAuth = true;
+        let connection = createConnection(opts);
+        connection.mode = "p2p";
+        return new MessageBus(connection);
       };
       module.exports.interface = iface;
       module.exports.Variant = Variant;

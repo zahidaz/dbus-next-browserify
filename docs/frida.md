@@ -49,7 +49,7 @@ const sessionId = reply.body[0];
 ## Browser usage
 
 ```html
-<script src="dbus-next.iife.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/zahidaz/dbus-next-browserify@release/dist/dbus-next.iife.js"></script>
 <script>
   var bus = DBusNext.connect('ws://device-ip:27042', { noAuth: true });
 
